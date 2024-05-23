@@ -1,80 +1,76 @@
 package main
 
 import (
-	"fmt"
-	"time"
+ "fmt"
+ "time"
 )
 
 type Cache interface {
-	Get(k string) (string, bool)
-	Set(k, v string)
-	Cleanup()
+ Get(k string) (string, bool)
+ Set(k, v string)
 }
 
 var _ Cache = (*cacheImpl)(nil)
 
-// Доработает конструктор и методы кеша, так чтобы они соответствовали интерфейсу Cache
+// Доработаем конструктор и методы кеша, чтобы они соответствовали интерфейсу Cache
 func newCacheImpl() *cacheImpl {
-	return &cacheImpl{
-		    data:       make(map[string]string),
-		    expiration: make(map[string]time.Time),
-	}
+ return &cacheImpl{
+  cache: make(map[string]cacheEntry),
+ }
 }
 
 type cacheImpl struct {
-	data       map[string]string
-	expiration map[string]time.Time
+ cache map[string]cacheEntry
+}
+
+type cacheEntry struct {
+ value     string
+ timestamp time.Time
 }
 
 func (c *cacheImpl) Get(k string) (string, bool) {
-	// TODO implement me
-	c.Cleanup() 
-	v, ok := c.data[k]
-	return v, ok
+ entry, exists := c.cache[k]
+ if exists {
+  // Проверяем, не просрочен ли ключ
+  if time.Now().Sub(entry.timestamp) > time.Minute {
+   delete(c.cache, k)
+   return "", false
+  }
+  return entry.value, true
+ }
+ return "", false
 }
 
 func (c *cacheImpl) Set(k, v string) {
-	// TODO implement me
-	c.data[k] = v
-	c.expiration[k] = time.Now().Add(5 * time.Minute)
+ entry := cacheEntry{
+  value:     v,
+  timestamp: time.Now(),
+ }
+ c.cache[k] = entry
 }
-
-func (c *cacheImpl) Cleanup() {
-	now := time.Now()
-	for k, exp := range c.expiration {
-		if now.After(exp) {
-			delete(c.data, k)
-			delete(c.expiration, k)
-		}
-	}
-}
-
 
 func newDbImpl(cache Cache) *dbImpl {
-	return &dbImpl{cache: cache, dbs: map[string]string{"hello": "world", "test": "test"}}
+ return &dbImpl{cache: cache, dbs: map[string]string{"hello": "world", "test": "test"}}
 }
 
 type dbImpl struct {
-	cache Cache
-	dbs   map[string]string
+ cache Cache
+ dbs   map[string]string
 }
 
 func (d *dbImpl) Get(k string) (string, bool) {
-	v, ok := d.cache.Get(k)
-	if ok {
-		return fmt.Sprintf("answer from cache: key: %s, val: %s", k, v), ok
-	}
+ v, ok := d.cache.Get(k)
+ if ok {
+  return fmt.Sprintf("answer from cache: key: %s, val: %s", k, v), ok
+ }
 
-	v, ok = d.dbs[k]
-	return fmt.Sprintf("answer from dbs: key: %s, val: %s", k, v), ok
+ v, ok = d.dbs[k]
+ return fmt.Sprintf("answer from dbs: key: %s, val: %s", k, v), ok
 }
 
 func main() {
-	c := newCacheImpl()
-	db := newDbImpl(c)
-	db.cache.Set("key1", "value1")
-	db.cache.Set("key2", "value2")
-	time.Sleep(6 * time.Minute)
-	fmt.Println(db.Get("test"))
-	fmt.Println(db.Get("hello"))
+ c := newCacheImpl()
+ db := newDbImpl(c)
+ fmt.Println(db.Get("test"))
+ fmt.Println(db.Get("hello"))
 }
